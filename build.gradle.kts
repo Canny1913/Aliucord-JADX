@@ -8,26 +8,18 @@ plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1"
 
 	// auto update dependencies with 'useLatestVersions' task
-	id("se.patrikerdes.use-latest-versions") version "0.2.18"
-	id("com.github.ben-manes.versions") version "0.52.0"
+	id("se.patrikerdes.use-latest-versions") version "0.2.19"
+	id("com.github.ben-manes.versions") version "0.54.0"
 }
 
 dependencies {
-	val jadxVersion = "1.5.1"
+	val jadxVersion = "1.5.5"
 	val isJadxSnapshot = jadxVersion.endsWith("-SNAPSHOT")
 
 	// use compile only scope to exclude jadx-core and its dependencies from result jar
     compileOnly("io.github.skylot:jadx-core:$jadxVersion") {
         isChanging = isJadxSnapshot
     }
-
-	testImplementation("io.github.skylot:jadx-smali-input:$jadxVersion") {
-        isChanging = isJadxSnapshot
-    }
-	testImplementation("ch.qos.logback:logback-classic:1.5.18")
-	testImplementation("org.assertj:assertj-core:3.27.3")
-	testImplementation("org.junit.jupiter:junit-jupiter:5.12.1")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 repositories {
@@ -45,9 +37,6 @@ java {
 version = System.getenv("VERSION") ?: "dev"
 
 tasks {
-    withType(Test::class) {
-        useJUnitPlatform()
-    }
     val shadowJar = withType(ShadowJar::class) {
         archiveClassifier.set("") // remove '-all' suffix
     }

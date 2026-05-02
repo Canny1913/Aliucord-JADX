@@ -1,12 +1,4 @@
 
- ## JADX Example plugin
+ ## Aliucord-JADX
 
-Simple example of jadx plugin.
-Adds a jadx watermark comment to every generated java class
-
-Install using location id: `github:jadx-decompiler:jadx-example-plugin`
-
-In jadx-cli:
-```bash
-  jadx plugins --install "github:jadx-decompiler:jadx-example-plugin"
-```
+Adds some context menu items to make plugin development slightly more convenient.
