@@ -3,35 +3,30 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import java.util.Locale
 
 plugins {
-    `java-library`
-
     id("com.github.johnrengelman.shadow") version "8.1.1"
-
-	// auto update dependencies with 'useLatestVersions' task
 	id("se.patrikerdes.use-latest-versions") version "0.2.19"
 	id("com.github.ben-manes.versions") version "0.54.0"
+	kotlin("jvm") version "2.3.0"
 }
 
 dependencies {
 	val jadxVersion = "1.5.5"
 	val isJadxSnapshot = jadxVersion.endsWith("-SNAPSHOT")
 
-	// use compile only scope to exclude jadx-core and its dependencies from result jar
     compileOnly("io.github.skylot:jadx-core:$jadxVersion") {
         isChanging = isJadxSnapshot
     }
+	implementation(kotlin("stdlib-jdk8"))
 }
 
+kotlin {
+	jvmToolchain(11)
+}
 repositories {
 	mavenLocal()
     mavenCentral()
     maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/")
     google()
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
 }
 
 version = System.getenv("VERSION") ?: "dev"
