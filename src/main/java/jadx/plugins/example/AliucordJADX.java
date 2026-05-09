@@ -27,11 +27,11 @@ public class AliucordJADX implements JadxPlugin {
 	Function<ICodeNodeRef, Boolean> isHookActionEnabled = (node) -> node instanceof MethodNode;
 	Function<ICodeNodeRef, Boolean> isFieldActionEnabled = (node) -> node instanceof FieldNode && options.getCodegenLanguage() == CodegenLanguage.KOTLIN;
 
-	private static final String KOTLIN_CONSTRUCTOR_TEMPLATE = "patcher.%1$s<%2$s>(%3$s) { param -> // code }";
-	private static final String KOTLIN_METHOD_TEMPLATE = "patcher.%1$s<%2$s>(\"%3$s\"%4$s) { param -> // code }";
+	private static final String KOTLIN_CONSTRUCTOR_TEMPLATE = "patcher.%1$s<%2$s>(%3$s) { param -> \n // code \n }";
+	private static final String KOTLIN_METHOD_TEMPLATE = "patcher.%1$s<%2$s>(%3$s%4$s) { param -> \n // code \n }";
 	private static final String KOTLIN_FIELD_TEMPLATE = "var %1$s.exampleField by accessField<%2$s>(%3$s)";
-	private static final String JAVA_CONSTRUCTOR_TEMPLATE = "Patcher.addPatch(%2$s.getDeclaredConstructor(%3$s), new %1$s(param -> { // code }))";
-	private static final String JAVA_METHOD_TEMPLATE = "Patcher.addPatch(%2$s, \"%3$s\", new Class<?>[]{ %4$s }, new %1$s(param -> { // code }))";
+	private static final String JAVA_CONSTRUCTOR_TEMPLATE = "patcher.patch(%2$s.getDeclaredConstructor(%3$s), new %1$s(param -> { \n // code \n }))";
+	private static final String JAVA_METHOD_TEMPLATE = "patcher.patch(%2$s.class.getDeclaredMethod(\"%3$s\", %4$s), new %1$s(param -> { \n // code \n }))";
 
 	private final Map<String, String> PRIMITIVE_TYPE_MAPPING = Map.of("int", "Int", "byte", "Byte", "short", "Short", "long", "Long", "float", "Float", "double", "Double", "char", "Char", "boolean", "Boolean");
 	private final Map<String, String> BOXED_TYPE_MAPPING = Map.of("java.lang.Integer", "Int", "java.lang.Byte", "Byte", "java.lang.Short", "Short", "java.lang.Long", "Long", "java.lang.Float", "Float", "java.lang.Double", "Double", "java.lang.Character", "Char", "java.lang.Boolean", "Boolean", "java.lang.Object", "Any");
@@ -110,7 +110,14 @@ public class AliucordJADX implements JadxPlugin {
 		if (language == CodegenLanguage.JAVA) {
 			className = String.format("%s.class", className);
 		}
-
+		if (language == CodegenLanguage.KOTLIN) {
+			if (className.contains("$")) className = String.format("`%s`", className);
+			if (methodName.contains("$")) {
+				methodName = String.format("$$\"%s\"", methodName);
+			} else {
+				methodName = String.format("\"%s\"", methodName);
+			}
+		}
 		if (node.getAccessFlags().isAbstract()) {
 			throw new JadxRuntimeException("Cannot create a snippet of abstract method.");
 		}
@@ -128,9 +135,9 @@ public class AliucordJADX implements JadxPlugin {
 		StringBuilder sb = new StringBuilder();
 		Formatter formatter = new Formatter(sb, Locale.ROOT);
 		if (method.isConstructor()) {
-			formatter.format(constructorTemplate, hookTypeStr, className, args.collect(Collectors.joining(", ", ", ", "")));
+			formatter.format(constructorTemplate, hookTypeStr, className, args.collect(Collectors.joining(",\n", ",\n", "")));
 		} else {
-			formatter.format(methodTemplate, hookTypeStr, className, methodName, args.collect(Collectors.joining(", ", ", ", "")));
+			formatter.format(methodTemplate, hookTypeStr, className, methodName, args.collect(Collectors.joining(",\n", ",\n", "")));
 		}
 		return sb.toString();
 	}
@@ -149,10 +156,13 @@ public class AliucordJADX implements JadxPlugin {
 			className = clazz.getName();
 		}
 
-		if (language == CodegenLanguage.KOTLIN && fieldName.contains("$")) {
-			fieldName = String.format("$$\"%s\"", fieldName);
-		} else {
-			fieldName = String.format("\"%s\"", fieldName);
+		if (language == CodegenLanguage.KOTLIN) {
+			if (className.contains("$")) className = String.format("`%s`", className);
+			if (fieldName.contains("$")) {
+				fieldName = String.format("$$\"%s\"", fieldName);
+			} else {
+				fieldName = String.format("\"%s\"", fieldName);
+			}
 		}
 		if (node.getAccessFlags().isAbstract()) {
 			throw new JadxRuntimeException("Cannot create a getter snippet of abstract field.");
@@ -171,7 +181,7 @@ public class AliucordJADX implements JadxPlugin {
 				return String.format("Array<%s>", processTypeName(arrayElementType.toString(), false));
 			}
 			if (type.isGenericType() && type.isObject() && type.isTypeKnown()) {
-				return "*";
+				return processTypeName("java.lang.Object", false);
 			}
 			if (type.isGeneric() && type.isObject()) {
 				var generics = type.getGenericTypes().stream().map((a) -> "*").collect(Collectors.joining(","));
