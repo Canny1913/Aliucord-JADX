@@ -6,6 +6,7 @@ import jadx.api.plugins.JadxPluginContext
 import jadx.api.plugins.JadxPluginInfo
 import jadx.api.plugins.JadxPluginInfoBuilder
 import jadx.api.plugins.gui.JadxGuiContext
+import jadx.core.dex.info.ClassInfo
 import jadx.core.dex.instructions.args.ArgType
 import jadx.core.dex.instructions.args.PrimitiveType
 import jadx.core.dex.nodes.FieldNode
@@ -85,15 +86,18 @@ class AliucordJADX : JadxPlugin {
 	}
 
 	fun copyMethodSnippet(node: MethodNode, hookType: HookType): String {
+		if (node.accessFlags.isAbstract) throw JadxRuntimeException("Cannot create a snippet of abstract method.")
+
 		val language = options.codegenLanguage
 		val method = node.methodInfo
-		val args = node.argTypes.map(this::fixType)
+		val reflectArgs = node.argTypes.map { mapArgType(node, it, true) }
+		val methodArgs = node.argTypes.map { mapArgType(node, it, false) }
 		val clazz = node.declaringClass
 		var methodName = method.name
 		val hookTypeStr = hookType.asString(language)
 
 		var className = if (options.useFullName) {
-			clazz.rawName
+			clazz.fullName
 		} else {
 			clazz.name
 		}
@@ -108,33 +112,36 @@ class AliucordJADX : JadxPlugin {
 				"\"$methodName\""
 			}
 		}
-		if (node.accessFlags.isAbstract) throw JadxRuntimeException("Cannot create a snippet of abstract method.")
+
+		val formattedMethodArgs = methodArgs.mapIndexed { index, arg -> "p$index: $arg" }.joinToString(",\n", ",\n", "\n", DECONSTRUCTURED_ARG_LIMIT, "// too many args")
+		val formatterPrefix = if (method.isConstructor) "\n" else ",\n"
+		val formattedReflectArgs = reflectArgs.joinToString(",\n", formatterPrefix, "\n")
 		return if (method.isConstructor) {
-			val formattedArgs = args.joinToString(",\n")
 			if (options.codegenLanguage.isKotlin()) {
-				"patcher.$hookTypeStr<$className>($formattedArgs) { param -> \n // code \n }"
+				"patcher.$hookTypeStr<$className>($formattedReflectArgs) { (param$formattedMethodArgs) -> \n // code \n }"
 			} else {
-				"patcher.patch($className.getDeclaredConstructor($formattedArgs), new $hookTypeStr(param -> { \n // code \n }))"
+				"patcher.patch($className.getDeclaredConstructor($formattedReflectArgs), new $hookTypeStr(param -> { \n // code \n }))"
 			}
 		} else {
-			val formattedArgs = args.joinToString(",\n", ",\n")
 			if (options.codegenLanguage.isKotlin()) {
-				"patcher.$hookTypeStr<$className>($methodName$formattedArgs) { param -> \n // code \n }"
+				"patcher.$hookTypeStr<$className>($methodName$formattedReflectArgs) { (param$formattedMethodArgs) -> \n // code \n }"
 			} else {
-				"patcher.patch($className.getDeclaredMethod($methodName$formattedArgs), new $hookTypeStr(param -> { \n // code \n }))"
+				"patcher.patch($className.getDeclaredMethod($methodName$formattedReflectArgs), new $hookTypeStr(param -> { \n // code \n }))"
 			}
 		}
 	}
 
 	fun copyFieldSnippet(node: FieldNode): String {
+		if (node.accessFlags.isAbstract) throw JadxRuntimeException("Cannot create a getter snippet of abstract field.")
+
 		val language = options.codegenLanguage
 		val field = node.fieldInfo
-		val fieldType = getFieldType(node.type)
+		val fieldType = mapFieldType(node.type)
 		val clazz = node.declaringClass
 		var fieldName = field.name
 
 		var className = if (options.useFullName) {
-			clazz.rawName
+			clazz.fullName
 		} else {
 			clazz.name
 		}
@@ -148,11 +155,10 @@ class AliucordJADX : JadxPlugin {
 			}
 		}
 
-		if (node.accessFlags.isAbstract) throw JadxRuntimeException("Cannot create a getter snippet of abstract field.")
 		return "var $className.exampleField by accessField<$fieldType>($fieldName)"
 	}
 
-	fun getFieldType(type: ArgType): String {
+	fun mapFieldType(type: ArgType): String {
 		val language = options.codegenLanguage
 		if (language.isKotlin()) {
 			if (type.canBeArray()) {
@@ -164,7 +170,7 @@ class AliucordJADX : JadxPlugin {
 				processTypeName("java.lang.Object", false)
 			}
 			if (type.isGeneric && type.isObject) {
-				val generics = type.genericTypes.map { "*" }.joinToString { "," }
+				val generics = type.genericTypes.joinToString(", ") { "*" }
 				val processedType = processTypeName(type.`object`, false)
 				return "$processedType<$generics>"
 			}
@@ -176,37 +182,45 @@ class AliucordJADX : JadxPlugin {
 		return processTypeName(type.toString(), false)
 	}
 
-	fun fixType(type: ArgType): String {
+	fun mapArgType(node: MethodNode, type: ArgType, asClass: Boolean): String {
 		val language = options.codegenLanguage
 		if (type.isGeneric && type.isObject) {
-			return if (type.innerType != null) {
-				processTypeName(type.toString(), true)
+			val processedType = processTypeName(type.`object`, asClass)
+			if (!asClass) {
+				val generics = type.genericTypes.joinToString(", ") { "*" }
+				return "$processedType<$generics>"
 			} else {
-				processTypeName(type.`object`, true)
+				return processedType
 			}
 		}
 		if (type.isGenericType && type.isObject && type.isTypeKnown) {
-			processTypeName("java.lang.Object", false)
+			processTypeName("java.lang.Object", asClass)
 		}
 		if (type.isPrimitive) {
 			if (language.isJava()) return "$type.class"
 			val pt = type.primitiveType
-			return when (pt) {
-				PrimitiveType.BOOLEAN -> "Boolean::class.javaPrimitiveType!!"
-				PrimitiveType.CHAR -> "Char::class.javaPrimitiveType!!"
-				PrimitiveType.BYTE -> "Byte::class.javaPrimitiveType!!"
-				PrimitiveType.SHORT -> "Short::class.javaPrimitiveType!!"
-				PrimitiveType.INT -> "Int::class.javaPrimitiveType!!"
-				PrimitiveType.FLOAT -> "Float::class.javaPrimitiveType!!"
-				PrimitiveType.LONG -> "Long::class.javaPrimitiveType!!"
-				PrimitiveType.DOUBLE -> "Double::class.javaPrimitiveType!!"
-				PrimitiveType.OBJECT -> "Any::class.java!!"
-				PrimitiveType.ARRAY -> "Array::class.java!!"
-				PrimitiveType.VOID -> "Void::class.javaPrimitiveType!!"
+			val ptType = when (pt) {
+				PrimitiveType.BOOLEAN -> "Boolean"
+				PrimitiveType.CHAR -> "Char"
+				PrimitiveType.BYTE -> "Byte"
+				PrimitiveType.SHORT -> "Short"
+				PrimitiveType.INT -> "Int"
+				PrimitiveType.FLOAT -> "Float"
+				PrimitiveType.LONG -> "Long"
+				PrimitiveType.DOUBLE -> "Double"
+				PrimitiveType.OBJECT -> "Any"
+				PrimitiveType.ARRAY -> "Array"
+				PrimitiveType.VOID -> "Void"
 				else -> throw JadxRuntimeException("Unknown or null primitive type: $type")
 			}
+			processTypeName(ptType, asClass)
 		}
-		return processTypeName(type.toString(), true)
+		val objectType = if (type.`object`.contains("$")) {
+			ClassInfo.fromType(node.root(), type).fullName
+		} else {
+			type.`object`
+		}
+		return processTypeName(objectType, asClass)
 	}
 
 	fun processTypeName(type: String, asClass: Boolean): String {
@@ -214,14 +228,18 @@ class AliucordJADX : JadxPlugin {
 		val language = options.codegenLanguage
 		var newType = type
 		if (!useFullName) {
-			newType = type.substringAfterLast('.')
+			newType = type.substringAfterLast('.') // hacky but idc
+		}
+		val isBoxed = type in BOXED_TYPE_MAPPING
+		if (isBoxed) {
+			newType = BOXED_TYPE_MAPPING[type]!!
 		}
 		if (asClass) {
 			if (language.isJava()) return "$newType.class"
-			return if (type in BOXED_TYPE_MAPPING) {
+			return if (isBoxed) {
 				"$newType::class.javaObjectType"
 			} else {
-				"$newType:class.java"
+				"$newType::class.java"
 			}
 		} else {
 			return newType
@@ -250,7 +268,11 @@ class AliucordJADX : JadxPlugin {
 			"java.lang.Double" to "Double",
 			"java.lang.Character" to "Char",
 			"java.lang.Boolean" to "Boolean",
+			"java.lang.String" to "String",
+			"java.lang.Object" to "Any"
 		)
+		// Aliucord core only allows 11 args to be destructured in hook lambda
+		private const val DECONSTRUCTURED_ARG_LIMIT = 11
 	}
 }
 
