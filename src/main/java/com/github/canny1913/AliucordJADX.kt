@@ -247,7 +247,7 @@ class AliucordJADX : JadxPlugin {
 	}
 
 	internal companion object {
-		const val PLUGIN_ID = "aliucord-jadx"
+		const val PLUGIN_ID = "jadx-aliucord"
 
 		private val PRIMITIVE_TYPE_MAPPING: Map<String, String> = mapOf(
 			"int" to "Int",

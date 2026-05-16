@@ -1,1 +1,1 @@
-rootProject.name = "aliucord-jadx"
+rootProject.name = "jadx-aliucord"
