@@ -29,8 +29,6 @@ repositories {
     google()
 }
 
-version = System.getenv("VERSION") ?: "dev"
-
 tasks {
     val shadowJar = withType(ShadowJar::class) {
         archiveClassifier.set("") // remove '-all' suffix
