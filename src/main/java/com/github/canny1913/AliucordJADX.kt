@@ -35,6 +35,7 @@ class AliucordJADX : JadxPlugin {
 	}
 
 	fun initGui(context: JadxGuiContext) {
+		context.uiRun {  }
 		context.addPopupMenuAction(
 			"Copy Aliucord hook snippet (before)", ::isHookActionEnabled, null
 		) {
@@ -93,7 +94,7 @@ class AliucordJADX : JadxPlugin {
 		val reflectArgs = node.argTypes.map { mapArgType(node, it, true) }
 		val methodArgs = node.argTypes.map { mapArgType(node, it, false) }
 		val clazz = node.declaringClass
-		var methodName = method.name
+		var methodName = "\"${method.name}\""
 		val hookTypeStr = hookType.asString(language)
 
 		var className = if (options.useFullName) {
@@ -106,11 +107,7 @@ class AliucordJADX : JadxPlugin {
 		}
 		if (language.isKotlin()) {
 			if (className.contains('$')) className = "`$className`"
-			methodName = if (methodName.contains('$')) {
-				"$$\"$methodName\""
-			} else {
-				"\"$methodName\""
-			}
+			if (methodName.contains('$')) methodName = "$$\"$methodName\""
 		}
 
 		val formattedMethodArgs = methodArgs.mapIndexed { index, arg -> "p$index: $arg" }.joinToString(",\n", ",\n", "\n", DECONSTRUCTURED_ARG_LIMIT, "// too many args")
@@ -167,7 +164,7 @@ class AliucordJADX : JadxPlugin {
 				return "Array<$processedType>"
 			}
 			if (type.isGenericType && type.isObject && type.isTypeKnown) {
-				processTypeName("java.lang.Object", false)
+				return processTypeName("java.lang.Object", false)
 			}
 			if (type.isGeneric && type.isObject) {
 				val generics = type.genericTypes.joinToString(", ") { "*" }
@@ -194,7 +191,7 @@ class AliucordJADX : JadxPlugin {
 			}
 		}
 		if (type.isGenericType && type.isObject && type.isTypeKnown) {
-			processTypeName("java.lang.Object", asClass)
+			return processTypeName("java.lang.Object", asClass)
 		}
 		if (type.isPrimitive) {
 			if (language.isJava()) return "$type.class"
@@ -213,7 +210,7 @@ class AliucordJADX : JadxPlugin {
 				PrimitiveType.VOID -> "Void"
 				else -> throw JadxRuntimeException("Unknown or null primitive type: $type")
 			}
-			processTypeName(ptType, asClass)
+			return processTypeName(ptType, asClass)
 		}
 		val objectType = if (type.`object`.contains("$")) {
 			ClassInfo.fromType(node.root(), type).fullName
