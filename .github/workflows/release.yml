@@ -38,8 +38,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${{ github.ref_name }}"
-          plugin_file="aliucord-jadx-$tag.jar"
-          mv -T ./build/dist/aliucord-jadx.jar "./$plugin_file"
+          plugin_file="jadx-aliucord-$tag.jar"
+          mv -T ./build/dist/jadx-aliucord.jar "./$plugin_file"
 
           gh release create "$tag" \
             --title "v$tag" \
